@@ -11,7 +11,7 @@ export default function PerspectiveWallGenerator() {
   const [cameraHeight, setCameraHeight] = useState(1500);
 
   // Geometry
-  const [distance, setDistance] = useState(1000); 
+  const [distance, setDistance] = useState(3000); // Default bumped to 3000
   const [wallLength, setWallLength] = useState(1000); 
   const [roadWidth, setRoadWidth] = useState(3000); 
   const [wallHeight, setWallHeight] = useState(1500); 
@@ -52,9 +52,8 @@ export default function PerspectiveWallGenerator() {
   };
 
   // --- Core Rendering Logic ---
-  // Extracted so it can be used by both the Preview Canvas and the Download Generator
   const renderScene = useCallback((ctx, width, height, isExport = false) => {
-    // 1. Setup Environment (only if not exporting transparently)
+    // 1. Setup Environment
     if (!isExport) {
       // Sky
       ctx.fillStyle = '#bfdbfe'; 
@@ -95,10 +94,10 @@ export default function PerspectiveWallGenerator() {
       return { x: screenX, y: screenY, scale };
     };
 
-    // 3. Draw Ground (Only if enabled and not exporting isolated wall)
+    // 3. Draw Ground
     if (showGround && !isExport) {
       const roadZStart = 100;
-      const roadZEnd = 20000;
+      const roadZEnd = 30000; // Increased draw distance
       const rW = roadWidth / 2;
 
       const p1 = project(-rW, 0, roadZStart);
@@ -162,14 +161,13 @@ export default function PerspectiveWallGenerator() {
         
         ctx.fill();
         
-        // Use matching stroke to prevent anti-aliasing gaps between stripes
         ctx.strokeStyle = stripe.color; 
         ctx.lineWidth = 1;
         ctx.stroke();
       }
     });
 
-    // 5. Wireframe (Only in preview)
+    // 5. Wireframe (Preview only)
     if (!isExport) {
         const corners = [
             project(wallX, 0, zNear),
@@ -193,8 +191,7 @@ export default function PerspectiveWallGenerator() {
   }, [fov, cameraHeight, distance, wallLength, originY, roadWidth, wallHeight, stripes, showGround, side]);
 
 
-  // --- Effects ---
-  // Render Preview
+  // --- Render Loop ---
   useEffect(() => {
     const canvas = canvasRef.current;
     if(!canvas) return;
@@ -203,7 +200,7 @@ export default function PerspectiveWallGenerator() {
   }, [renderScene]);
 
 
-  // --- Export Function ---
+  // --- Export ---
   const handleDownload = () => {
     const baseWidth = 800;
     const baseHeight = 500;
@@ -215,14 +212,11 @@ export default function PerspectiveWallGenerator() {
     tempCanvas.height = scaledHeight;
     const ctx = tempCanvas.getContext('2d');
 
-    // Scale the context so the drawing logic (which assumes 800x500) works on the larger canvas
     ctx.scale(exportScale, exportScale);
-
-    // Render transparently
     renderScene(ctx, baseWidth, baseHeight, true);
 
     const link = document.createElement('a');
-    link.download = `perspective-wall-x${exportScale}.png`;
+    link.download = `wall-segment-z${distance}-len${wallLength}.png`;
     link.href = tempCanvas.toDataURL('image/png');
     link.click();
   };
@@ -230,16 +224,16 @@ export default function PerspectiveWallGenerator() {
   return (
     <div className="bg-gray-200 h-screen w-screen flex flex-col overflow-hidden font-sans">
       
-      {/* Main Content Area */}
+      {/* Main Container */}
       <div className="flex flex-1 h-full max-w-[1600px] mx-auto w-full shadow-2xl bg-white overflow-hidden rounded-lg my-4 md:my-6 md:mx-6 border border-gray-300">
         
-        {/* Left: Interactive Canvas */}
+        {/* LEFT: Canvas */}
         <div className="flex-1 bg-gray-50 flex flex-col relative overflow-hidden">
           <div className="absolute top-4 left-4 z-10 flex gap-2">
             <div className="bg-white/90 backdrop-blur px-3 py-2 rounded-lg shadow-sm border border-gray-200 text-xs font-mono text-gray-600">
                 <div className="font-bold mb-1">Preview Info</div>
-                <div>FOV: {fov}°</div>
-                <div>Y-Origin: {originY}</div>
+                <div>Z-Dist: {distance}</div>
+                <div>Z-Len: {wallLength}</div>
             </div>
           </div>
           
@@ -247,17 +241,16 @@ export default function PerspectiveWallGenerator() {
              <canvas
               ref={canvasRef}
               width={800}
-              height={500}
+              height={800}
               className="max-w-full max-h-full bg-white shadow-lg border border-gray-300 rounded"
-              style={{ aspectRatio: '800/500' }}
+              style={{ aspectRatio: '800/800' }}
             />
           </div>
         </div>
 
-        {/* Right: Controls Sidebar */}
+        {/* RIGHT: Sidebar */}
         <div className="w-96 bg-white border-l border-gray-200 flex flex-col h-full">
           
-          {/* Header */}
           <div className="p-5 border-b border-gray-100 bg-white z-10">
             <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <Layers className="w-5 h-5 text-indigo-600" />
@@ -265,10 +258,9 @@ export default function PerspectiveWallGenerator() {
             </h1>
           </div>
 
-          {/* Scrollable Settings */}
           <div className="flex-1 overflow-y-auto p-5 space-y-8 custom-scrollbar">
             
-            {/* Camera Controls */}
+            {/* Camera */}
             <section className="space-y-3">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                 <Camera className="w-3 h-3" /> Camera Settings
@@ -287,7 +279,7 @@ export default function PerspectiveWallGenerator() {
               </div>
             </section>
 
-            {/* Geometry Controls */}
+            {/* Geometry */}
             <section className="space-y-3">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
                 <Sliders className="w-3 h-3" /> Wall Geometry
@@ -298,16 +290,14 @@ export default function PerspectiveWallGenerator() {
                     <input type="range" min="1000" max="8000" step="100" value={roadWidth} onChange={(e) => setRoadWidth(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                  </ControlRow>
                  
-                 <div className="grid grid-cols-2 gap-4">
-                   <div className="col-span-1">
-                     <label className="text-[10px] uppercase font-semibold text-gray-500 mb-1 block">Start Z</label>
-                     <input type="number" value={distance} onChange={(e) => setDistance(Number(e.target.value))} className="w-full p-1.5 text-sm border border-gray-200 rounded focus:border-indigo-500 outline-none" />
-                   </div>
-                   <div className="col-span-1">
-                     <label className="text-[10px] uppercase font-semibold text-gray-500 mb-1 block">Length Z</label>
-                     <input type="number" value={wallLength} onChange={(e) => setWallLength(Number(e.target.value))} className="w-full p-1.5 text-sm border border-gray-200 rounded focus:border-indigo-500 outline-none" />
-                   </div>
-                 </div>
+                 {/* Replaced Grid with Single Line Sliders */}
+                 <ControlRow label="Start Z (Distance)" value={distance}>
+                    <input type="range" min="100" max="10000" step="100" value={distance} onChange={(e) => setDistance(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                 </ControlRow>
+
+                 <ControlRow label="Length Z (Depth)" value={wallLength}>
+                    <input type="range" min="100" max="5000" step="100" value={wallLength} onChange={(e) => setWallLength(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
+                 </ControlRow>
 
                  <ControlRow label="Wall Height" value={wallHeight}>
                     <input type="range" min="100" max="5000" step="50" value={wallHeight} onChange={(e) => setWallHeight(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
@@ -334,17 +324,17 @@ export default function PerspectiveWallGenerator() {
 
             {/* Stripes */}
             <section className="space-y-3">
-              <div className="flex justify-between items-center">
-                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Textures</h3>
-                 <button 
-                    onClick={addStripe} 
-                    className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md flex items-center gap-1.5 font-medium transition-colors shadow-sm shadow-indigo-200"
-                 >
-                    <Plus className="w-3 h-3" /> Add Stripe
-                 </button>
-              </div>
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Textures</h3>
+              
+              {/* BIG VISIBLE BUTTON */}
+              <button 
+                  onClick={addStripe} 
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-md hover:shadow-lg"
+               >
+                  <Plus className="w-4 h-4" /> Add New Stripe
+               </button>
 
-              <div className="space-y-2">
+              <div className="space-y-2 pt-2">
                 {stripes.map((stripe, index) => (
                   <div key={index} className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-gray-200 shadow-sm group hover:border-indigo-300 transition-colors">
                     <div className="flex-1">
@@ -380,7 +370,7 @@ export default function PerspectiveWallGenerator() {
             </section>
           </div>
 
-          {/* Footer / Download */}
+          {/* Footer */}
           <div className="p-5 border-t border-gray-200 bg-gray-50">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                <ImageIcon className="w-3 h-3" /> Export Isolated Quad
@@ -414,7 +404,6 @@ export default function PerspectiveWallGenerator() {
   );
 }
 
-// Helper Component for UI consistency
 function ControlRow({ label, value, children }) {
     return (
         <div>
