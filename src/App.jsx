@@ -5,13 +5,12 @@ export default function PerspectiveWallGenerator() {
   const canvasRef = useRef(null);
   
   // --- State ---
-  // Camera
   const [fov, setFov] = useState(60); 
   const [originY, setOriginY] = useState(0.5); 
   const [cameraHeight, setCameraHeight] = useState(1500);
 
   // Geometry
-  const [distance, setDistance] = useState(3000); // Default bumped to 3000
+  const [distance, setDistance] = useState(3000); 
   const [wallLength, setWallLength] = useState(1000); 
   const [roadWidth, setRoadWidth] = useState(3000); 
   const [wallHeight, setWallHeight] = useState(1500); 
@@ -55,11 +54,9 @@ export default function PerspectiveWallGenerator() {
   const renderScene = useCallback((ctx, width, height, isExport = false) => {
     // 1. Setup Environment
     if (!isExport) {
-      // Sky
       ctx.fillStyle = '#bfdbfe'; 
       ctx.fillRect(0, 0, width, height);
       
-      // Horizon Guide
       const horizonY = height * originY;
       ctx.strokeStyle = 'rgba(0,0,0,0.2)';
       ctx.setLineDash([5, 5]);
@@ -72,7 +69,6 @@ export default function PerspectiveWallGenerator() {
       ctx.clearRect(0, 0, width, height);
     }
 
-    // 2. Math Constants
     const fovRad = (fov * Math.PI) / 180;
     const cameraDepth = 1 / Math.tan(fovRad / 2);
     
@@ -94,10 +90,10 @@ export default function PerspectiveWallGenerator() {
       return { x: screenX, y: screenY, scale };
     };
 
-    // 3. Draw Ground
+    // Draw Ground (Skip if exporting transparent wall)
     if (showGround && !isExport) {
       const roadZStart = 100;
-      const roadZEnd = 30000; // Increased draw distance
+      const roadZEnd = 50000;
       const rW = roadWidth / 2;
 
       const p1 = project(-rW, 0, roadZStart);
@@ -115,7 +111,6 @@ export default function PerspectiveWallGenerator() {
         ctx.closePath();
         ctx.fill();
 
-        // Center line
         ctx.strokeStyle = '#d1d5db'; 
         ctx.setLineDash([20, 15]);
         ctx.beginPath();
@@ -130,7 +125,7 @@ export default function PerspectiveWallGenerator() {
       }
     }
 
-    // 4. Draw The Wall Segment
+    // Draw The Wall Segment
     const wallX = (roadWidth / 2) * side; 
     const zNear = distance;
     const zFar = distance + wallLength;
@@ -167,7 +162,7 @@ export default function PerspectiveWallGenerator() {
       }
     });
 
-    // 5. Wireframe (Preview only)
+    // Wireframe (Preview only)
     if (!isExport) {
         const corners = [
             project(wallX, 0, zNear),
@@ -200,6 +195,57 @@ export default function PerspectiveWallGenerator() {
   }, [renderScene]);
 
 
+  // --- Trimming Helper ---
+  const trimCanvas = (c) => {
+    const ctx = c.getContext('2d');
+    const w = c.width;
+    const h = c.height;
+    
+    // Get raw pixel data
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    
+    let minX = w, minY = h, maxX = 0, maxY = 0;
+    let found = false;
+
+    // Scan for non-transparent pixels
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const alpha = data[(y * w + x) * 4 + 3];
+        if (alpha > 0) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          found = true;
+        }
+      }
+    }
+
+    if (!found) return c; // Return original if empty
+
+    // Add padding
+    const padding = 2;
+    minX = Math.max(0, minX - padding);
+    minY = Math.max(0, minY - padding);
+    maxX = Math.min(w, maxX + padding);
+    maxY = Math.min(h, maxY + padding);
+
+    const croppedWidth = maxX - minX;
+    const croppedHeight = maxY - minY;
+
+    // Create cropped canvas
+    const croppedCanvas = document.createElement('canvas');
+    croppedCanvas.width = croppedWidth;
+    croppedCanvas.height = croppedHeight;
+    const croppedCtx = croppedCanvas.getContext('2d');
+
+    // Draw just the content from the original
+    croppedCtx.drawImage(c, minX, minY, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
+    
+    return croppedCanvas;
+  };
+
   // --- Export ---
   const handleDownload = () => {
     const baseWidth = 800;
@@ -207,6 +253,7 @@ export default function PerspectiveWallGenerator() {
     const scaledWidth = baseWidth * exportScale;
     const scaledHeight = baseHeight * exportScale;
 
+    // 1. Draw to full size canvas first
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = scaledWidth;
     tempCanvas.height = scaledHeight;
@@ -215,9 +262,13 @@ export default function PerspectiveWallGenerator() {
     ctx.scale(exportScale, exportScale);
     renderScene(ctx, baseWidth, baseHeight, true);
 
+    // 2. Trim empty space
+    const finalCanvas = trimCanvas(tempCanvas);
+
+    // 3. Download
     const link = document.createElement('a');
     link.download = `wall-segment-z${distance}-len${wallLength}.png`;
-    link.href = tempCanvas.toDataURL('image/png');
+    link.href = finalCanvas.toDataURL('image/png');
     link.click();
   };
 
@@ -241,9 +292,9 @@ export default function PerspectiveWallGenerator() {
              <canvas
               ref={canvasRef}
               width={800}
-              height={800}
+              height={500}
               className="max-w-full max-h-full bg-white shadow-lg border border-gray-300 rounded"
-              style={{ aspectRatio: '800/800' }}
+              style={{ aspectRatio: '800/500' }}
             />
           </div>
         </div>
@@ -290,7 +341,6 @@ export default function PerspectiveWallGenerator() {
                     <input type="range" min="1000" max="8000" step="100" value={roadWidth} onChange={(e) => setRoadWidth(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                  </ControlRow>
                  
-                 {/* Replaced Grid with Single Line Sliders */}
                  <ControlRow label="Start Z (Distance)" value={distance}>
                     <input type="range" min="100" max="10000" step="100" value={distance} onChange={(e) => setDistance(Number(e.target.value))} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                  </ControlRow>
@@ -326,10 +376,10 @@ export default function PerspectiveWallGenerator() {
             <section className="space-y-3">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Textures</h3>
               
-              {/* BIG VISIBLE BUTTON */}
               <button 
                   onClick={addStripe} 
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center gap-2 font-medium transition-all shadow-md hover:shadow-lg"
+                  style={{ backgroundColor: '#2563eb', color: 'white' }} 
+                  className="w-full py-2.5 rounded-lg flex items-center justify-center gap-2 font-bold shadow-md hover:opacity-90 transition-opacity"
                >
                   <Plus className="w-4 h-4" /> Add New Stripe
                </button>
@@ -387,14 +437,15 @@ export default function PerspectiveWallGenerator() {
                 </select>
                 <button 
                     onClick={handleDownload}
-                    className="flex-1 bg-gray-900 hover:bg-black text-white font-medium rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center justify-center gap-2 transition-colors shadow-lg shadow-gray-300"
+                    style={{ backgroundColor: '#000', color: 'white' }}
+                    className="flex-1 font-bold rounded-lg text-sm px-5 py-2.5 text-center inline-flex items-center justify-center gap-2 transition-opacity shadow-lg shadow-gray-300 hover:opacity-90"
                 >
                     <Download className="w-4 h-4" />
                     Download PNG
                 </button>
             </div>
             <p className="text-[10px] text-gray-500 mt-2 text-center">
-                Downloads transparent PNG of the wall only.
+                Downloads auto-cropped, transparent PNG of the wall only.
             </p>
           </div>
 
