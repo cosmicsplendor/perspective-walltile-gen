@@ -249,7 +249,7 @@ export default function PerspectiveWallGenerator() {
   // --- Export ---
   const handleDownload = () => {
     const baseWidth = 800;
-    const baseHeight = 500;
+    const baseHeight = 800;
     const scaledWidth = baseWidth * exportScale;
     const scaledHeight = baseHeight * exportScale;
 
@@ -292,9 +292,9 @@ export default function PerspectiveWallGenerator() {
              <canvas
               ref={canvasRef}
               width={800}
-              height={500}
+              height={800}
               className="max-w-full max-h-full bg-white shadow-lg border border-gray-300 rounded"
-              style={{ aspectRatio: '800/500' }}
+              style={{ aspectRatio: '800/800' }}
             />
           </div>
         </div>
